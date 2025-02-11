@@ -6,10 +6,11 @@
 
 *Professional monitoring solution for Cosmos Validators*
 
-> We deliberately chose to use pure Bash scripts instead of complex frameworks for this monitoring solution. This approach ensures simplicity, reliability, and minimal system overhead. No additional dependencies to manage, no complex configurations to learn - just efficient, lightweight scripts that get the job done. Perfect for validators who want a robust monitoring system without unnecessary complexity or server load.
+> We deliberately chose to use a combination of Bash and Python for this monitoring solution. This hybrid approach ensures both simplicity and reliability, while providing robust endpoint failover capabilities. The system automatically switches to backup RPC endpoints when needed, ensuring continuous monitoring even when primary endpoints fail.
 
 [![Cosmos](https://img.shields.io/badge/Cosmos-1E88E5?style=flat&logo=cosmos&logoColor=white)](https://cosmos.network)
 [![Telegram](https://img.shields.io/badge/Telegram-2CA5E0?style=flat&logo=telegram&logoColor=white)](https://telegram.org)
+[![Python](https://img.shields.io/badge/python-3670A0?style=flat&logo=python&logoColor=ffdd54)](https://www.python.org/)
 [![Bash](https://img.shields.io/badge/bash-%23121011.svg?style=flat&logo=gnu-bash&logoColor=white)](https://www.gnu.org/software/bash/)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
 
@@ -31,6 +32,9 @@
 
 ### 🔍 Real-time Monitoring
 - ⚡ Instant block validation checks
+- 🔄 Automatic RPC endpoint failover
+- 🌐 Multi-chain support
+- 🤖 Automated alert system
 - 💽 Regular disk space monitoring
 - 🎮 Active RAM usage tracking
 - 🤖 Automated alert system
@@ -40,6 +44,7 @@
 
 ### 🛡️ Proactive Management
 - 🔄 Automatic server reboot on high RAM
+- 🔍 Smart endpoint selection
 - ⚙️ Customizable alert thresholds
 - 📱 Telegram notifications
 - 📊 Detailed logging system
@@ -153,11 +158,46 @@ stateDiagram-v2
 |-------------|---------|-------------|
 | 🐧 Linux | Ubuntu 20.04 | Ubuntu 22.04 |
 | 🔄 curl | 7.68.0 | Latest |
+| 🔄 Python | 3.8+ | Latest |
 | 🔧 jq | 1.6 | Latest |
 | 📱 Telegram Bot | Any | Latest |
 | 💻 Bash | 5.0 | Latest |
 
 </div>
+
+Required Python packages:
+```bash
+pip3 install requests
+```
+
+## 🤖 Telegram Bot Setup
+
+1. Create a new bot:
+   - Message [@BotFather](https://t.me/BotFather) on Telegram
+   - Use `/newbot` command
+   - Follow instructions to create bot
+   - Copy the provided API token
+
+2. Get Chat ID:
+   - Add bot to your group
+   - Make bot admin
+   - Send any message to group
+   - Visit: `https://api.telegram.org/bot<YourBOTToken>/getUpdates`
+   - Find "chat" -> "id" in the response
+
+3. Get Thread ID (if using topics):
+   - Enable topics in group settings
+   - Create new topic
+   - Send message in topic
+   - Find "message_thread_id" in the getUpdates response
+
+4. Update script variables:
+```bash
+# Edit check.sh
+BOT_TOKEN="YOUR_BOT_TOKEN"
+CHAT_ID="YOUR_CHAT_ID"
+THREAD_ID="YOUR_THREAD_ID"  # Optional, for topic messages
+```
 
 ## ⚡ Quick Start
 
@@ -180,12 +220,15 @@ nano disk_check.sh
 crontab -e
 
 # Add these lines:
-*/5 * * * * $HOME/quasar-server-sentinel/check.sh
+*/5 * * * * $HOME/quasar-server-sentinel/check.sh <RPC_ENDPOINT> <VALIDATOR_ADDRESS> <CHAIN_ID> <CHAIN_NAME> [LOG_DIR]
 */5 * * * * $HOME/quasar-server-sentinel/ram_check.sh
 0 */6 * * * $HOME/quasar-server-sentinel/disk_check.sh
 
 # Verify crontab
 crontab -l
+
+# Example:
+*/5 * * * * $HOME/quasar-server-sentinel/check.sh http://localhost:26657 76A8A9A8151255E9E69E89499CFE9CB86FD cosmoshub-4 cosmoshub ./logs
 ```
 
 ## 📝 Monitoring Logs
@@ -206,11 +249,12 @@ cat /var/log/syslog | grep "Disk Monitor"
 <summary>📜 <b>Missed Blocks Settings</b> (click to expand)</summary>
 
 ```bash
-# check.sh configuration
-RPC_ENDPOINT="http://localhost:26657"
-VALIDATOR_ADDRESS="your_address"
-CHAIN_ID="your_chain_id"    # Chain identifier
-THRESHOLD=10                # Alert after 10 consecutive missed blocks
+# Script parameters
+RPC_ENDPOINT="$1"      # Primary RPC endpoint (usually local)
+VALIDATOR_ADDRESS="$2"  # Validator address in hex format 849ASD.....
+CHAIN_ID="$3"          # Chain ID (e.g., cosmoshub-4, osmosis-1)
+CHAIN_NAME="$4"        # Chain name for endpoint lookup (e.g., cosmoshub, osmosis)
+LOG_DIR="${5:-./logs}"  # Directory for log files, default to ./logs if not provided
 ```
 </details>
 
@@ -255,6 +299,11 @@ USED_RAM=15    # Alert and reboot when RAM usage exceeds 15GB
 • Free: 95GB
 • Status: Warning
 • Action: Cleanup needed
+```
+### 🔌 Endpoint Failover
+```
+🔴 cosmoshub-4 - no response from primary or backup endpoints 
+(tried 5 additional endpoints) on hostname
 ```
 
 </td>
