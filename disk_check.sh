@@ -1,11 +1,21 @@
 #!/bin/bash
 
-# Telegram Configuration
-BOT_TOKEN=""        # Telegram bot token
-CHAT_ID=""         # Group ID
-THREAD_ID=""       # Thread ID within the group
+# Get the directory where the script is located
+# This ensures we can find the config file regardless of where the script is called from
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 
-# Function to send Telegram notification
+# Load configuration variables from config.sh (thresholds, Telegram settings, etc.)
+source "${SCRIPT_DIR}/config.sh"
+
+# Add after source command
+if [ -z "$DISK_THRESHOLD" ] || [ -z "$BOT_TOKEN" ] || [ -z "$CHAT_ID" ] || [ -z "$THREAD_ID" ]; then
+    logger "Disk Monitor: Configuration error - missing required variables"
+    exit 1
+fi
+
+# Function to send notifications via Telegram
+# Parameters:
+#   $1 - message text to send
 send_tg_message() {
     local message=$1
     curl -s -X POST "https://api.telegram.org/bot${BOT_TOKEN}/sendMessage" \
@@ -15,22 +25,27 @@ send_tg_message() {
         -d parse_mode="HTML"
 }
 
-# Disk check
-# Get free space on root partition in gigabytes
+# Get available disk space in gigabytes
+# df -BG  - show disk space in GB units
+# awk 'NR==2 {print $4}' - get the 4th column (free space) from the second line
+# sed 's/G//' - remove the 'G' suffix from the number
 FREE_SPACE=$(df -BG / | awk 'NR==2 {print $4}' | sed 's/G//')
 
-# Check free disk space
-if [ ${FREE_SPACE} -lt 100 ]; then
-    # Prepare Telegram notification
-    DISK_ALERT="⚠️ Critical low disk space on $(hostname)!
-Free: ${FREE_SPACE}GB
-Threshold: 100GB
+# Add after FREE_SPACE definition
+if [ -z "$FREE_SPACE" ]; then
+    logger "Disk Monitor: Error getting disk space information"
+    exit 1
+fi
 
-❗️ Disk cleanup required!"
+# Check if free space is below the threshold
+# If free space is less than DISK_THRESHOLD (defined in config.sh), send alert
+if [ ${FREE_SPACE} -lt ${DISK_THRESHOLD} ]; then
+    # Format alert message with current free space value
+    FORMATTED_ALERT=$(printf "$DISK_ALERT_MSG" "$FREE_SPACE")
     
-    # Send Telegram notification
-    send_tg_message "$DISK_ALERT"
+    # Send notification to Telegram channel/group
+    send_tg_message "$FORMATTED_ALERT"
     
-    # Log critical event to system log
-    logger "Disk Monitor: Free space is below 100GB (Current: ${FREE_SPACE}GB)"
+    # Write event to system log for future reference
+    logger "Disk Monitor: Free space is below ${DISK_THRESHOLD}GB (Current: ${FREE_SPACE}GB)"
 fi 
