@@ -228,7 +228,7 @@ crontab -e
 crontab -l
 
 # Example:
-*/5 * * * * $HOME/quasar-server-sentinel/check.sh http://localhost:26657 76A8A9A8151255E9E69E89499CFE9CB86FD cosmoshub-4 cosmoshub ./logs
+*/5 * * * * $HOME/quasar-server-sentinel/check.sh http://localhost:26657 76A8A9A8151255E9E69E89499CFE9CB86FD cosmoshub-4 cosmos ./logs
 ```
 
 ## 📝 Monitoring Logs
