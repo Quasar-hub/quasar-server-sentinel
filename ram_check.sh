@@ -1,11 +1,21 @@
 #!/bin/bash
 
-# Telegram Configuration
-BOT_TOKEN=""        # Telegram bot token
-CHAT_ID=""         # Group ID
-THREAD_ID=""       # Thread ID within the group
+# Get the directory where the script is located
+# This ensures we can find the config file regardless of where the script is called from
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 
-# Function to send Telegram notification
+# Load configuration variables from config.sh (thresholds, Telegram settings, etc.)
+source "${SCRIPT_DIR}/config.sh"
+
+# Add after source command
+if [ -z "$RAM_THRESHOLD" ] || [ -z "$BOT_TOKEN" ] || [ -z "$CHAT_ID" ] || [ -z "$THREAD_ID" ]; then
+    logger "RAM Monitor: Configuration error - missing required variables"
+    exit 1
+fi
+
+# Function to send notifications via Telegram
+# Parameters:
+#   $1 - message text to send
 send_tg_message() {
     local message=$1
     curl -s -X POST "https://api.telegram.org/bot${BOT_TOKEN}/sendMessage" \
@@ -15,26 +25,32 @@ send_tg_message() {
         -d parse_mode="HTML"
 }
 
-# Get total used memory in gigabytes
+# Get current RAM usage in gigabytes
+# free -g     - show memory info in GB
+# grep Mem    - get the line with RAM info
+# awk '{print $3}' - get the 3rd column (used memory)
 USED_RAM=$(free -g | grep Mem | awk '{print $3}')
 
-# Check if usage exceeds 14GB
-if [ ${USED_RAM} -ge 15 ]; then
-    # Prepare Telegram notification
-    ALERT_MSG="⚠️ High RAM usage on $(hostname)!
-Used: ${USED_RAM}GB
-Threshold: 15GB
+# Add after USED_RAM definition
+if [ -z "$USED_RAM" ]; then
+    logger "RAM Monitor: Error getting RAM usage information"
+    exit 1
+fi
 
-🔄 Initiating server reboot."
+# Check if RAM usage is above the threshold
+# If used RAM is greater or equal to RAM_THRESHOLD (defined in config.sh)
+if [ ${USED_RAM} -ge ${RAM_THRESHOLD} ]; then
+    # Format alert message with current RAM usage
+    FORMATTED_ALERT=$(printf "$RAM_ALERT_MSG" "$USED_RAM")
     
-    # Send Telegram notification
-    send_tg_message "$ALERT_MSG"
+    # Send notification to Telegram channel/group
+    send_tg_message "$FORMATTED_ALERT"
     
-    # Log to system log
-    logger "RAM Monitor: Memory usage exceeded 15GB (Current: ${USED_RAM}GB). Executing immediate reboot..."
-    
-    # Execute reboot with sudo
+    # Write event to system log for future reference
+    logger "RAM Monitor: Memory usage exceeded ${RAM_THRESHOLD}GB (Current: ${USED_RAM}GB)"
+
+    # Reboot the system when RAM usage is too high
+    # Using full path to reboot command for security
+    # Requires sudo privileges for the user running the script
     sudo /sbin/reboot
-#else
-#    logger "RAM Monitor: Memory usage is normal (${USED_RAM}GB)"
 fi
